@@ -2,41 +2,33 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import matplotlib.pyplot as plt
-from sklearn.ensemble import VotingRegressor, RandomForestRegressor, ExtraTreesRegressor
+from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor, VotingRegressor
 
-# ==================== PAGE CONFIG ====================
+# ==================== CONFIG ====================
 st.set_page_config(
     page_title="World Risk Index 2025",
-    page_icon="Globe",
+    page_icon="Earth",
     layout="centered",
     initial_sidebar_state="expanded"
 )
 
-# ==================== CUSTOM CSS (BEAUTIFUL) ====================
 st.markdown("""
 <style>
-    .main {background-color: #f8f9fa;}
-    .stButton>button {background-color: #4361ee; color: white; font-weight: bold;}
-    .css-1d391kg {padding-top: 2rem;}
-    h1 {color: #1d3557; text-align: center;}
+    .main {background: linear-gradient(to right, #1e3a8a, #1e40af);}
+    .stButton>button {background-color: #f72585; color: white; font-weight: bold; border-radius: 10px;}
+    h1, h2, h3 {color: #f72585 !important;}
+    .css-1d391kg {padding-top: 1rem;}
 </style>
 """, unsafe_allow_html=True)
 
-st.title("World Risk Index 2025 Predictor")
-st.markdown("### Enter country indicators → Get instant WRI score")
+st.title("World Risk Index 2025")
+st.markdown("### Enter indicators → Get instant risk prediction")
 
-# ==================== OFFLINE DATA & MODEL ====================
+# ==================== TRAIN MODEL ONCE (OFFLINE) ====================
 @st.cache_resource
-def load_model():
-    # Simple but powerful offline model (trained on real 2023 data)
-    rf = RandomForestRegressor(n_estimators=1000, random_state=42)
-    et = ExtraTreesRegressor(n_estimators=1000, random_state=42)
-    model = VotingRegressor([("rf", rf), ("et", et)])
-    
-    # Real training data (15 countries)
-    X_train = np.array([
+def get_model():
+    X = np.array([
         [56.33,64.80,42.50,85.20,66.70], [56.04,53.20,30.10,82.50,47.00],
         [45.09,57.40,36.80,83.10,52.30], [36.40,63.80,43.20,86.40,61.80],
         [38.42,56.98,37.10,79.80,53.90], [27.52,69.64,48.90,88.70,71.30],
@@ -46,45 +38,49 @@ def load_model():
         [22.10,71.30,52.30,91.20,70.40], [25.97,59.40,41.10,82.60,54.50],
         [26.81,56.40,37.80,79.90,51.50]
     ])
-    y_train = np.array([36.49,29.81,25.88,23.23,21.88,19.16,18.46,17.92,17.70,16.82,16.12,15.98,15.76,15.42,15.11])
-    
-    model.fit(X_train, y_train)
+    y = np.array([36.49,29.81,25.88,23.23,21.88,19.16,18.46,17.92,17.70,16.82,16.12,15.98,15.76,15.42,15.11])
+
+    model = VotingRegressor([
+        ('rf', RandomForestRegressor(n_estimators=800, random_state=42)),
+        ('et', ExtraTreesRegressor(n_estimators=800, random_state=42))
+    ])
+    model.fit(X, y)
     return model
 
-model = load_model()
+model = get_model()
 
-# ==================== SIDEBAR INPUTS ====================
-st.sidebar.header("Input Risk Indicators")
+# ==================== INPUTS ====================
+st.sidebar.header("Risk Indicators (0–100)")
 
-exposure = st.sidebar.slider("Exposure", 0.0, 100.0, 40.0, 0.1)
+exposure = st.sidebar.slider("Exposure", 0.0, 100.0, 45.0, 0.1)
 vulnerability = st.sidebar.slider("Vulnerability", 0.0, 100.0, 60.0, 0.1)
 susceptibility = st.sidebar.slider("Susceptibility", 0.0, 100.0, 40.0, 0.1)
 coping = st.sidebar.slider("Lack of Coping Capabilities", 0.0, 100.0, 80.0, 0.1)
 adaptive = st.sidebar.slider("Lack of Adaptive Capacities", 0.0, 100.0, 60.0, 0.1)
 
-# ==================== PREDICTION ====================
-if st.sidebar.button("Predict World Risk Index"):
+# ==================== PREDICT ====================
+if st.sidebar.button("Predict WRI Score"):
     features = np.array([[exposure, vulnerability, susceptibility, coping, adaptive]])
-    prediction = model.predict(features)[0]
-    
-    st.success(f"### Predicted WRI Score: **{prediction:.2f}**")
-    
-    if prediction >= 30:
-        st.error("EXTREME RISK")
-    elif prediction >= 20:
-        st.warning("HIGH RISK")
-    elif prediction >= 15:
-        st.info("MODERATE RISK")
-    else:
-        st.success("LOW RISK")
-    
-    # Show comparison
-    st.write("#### Comparison with Real Countries (2023)")
-    comparison = pd.DataFrame({
-        "Country": ["Vanuatu", "Philippines", "Bangladesh", "Your Input"],
-        "WRI": [36.49, 25.88, 19.16, round(prediction, 2)]
-    })
-    st.bar_chart(comparison.set_index("Country")["WRI"])
+    score = model.predict(features)[0]
 
-st.markdown("---")
-st.caption("Model trained on official World Risk Report 2023 data • No internet needed • Works offline")
+    st.success(f"### Predicted World Risk Index: **{score:.2f}**")
+
+    if score >= 30:
+        st.error("EXTREME RISK – Like Vanuatu")
+    elif score >= 25:
+        st.warning("VERY HIGH RISK – Like Philippines")
+    elif score >= 20:
+        st.info("HIGH RISK – Like Bangladesh")
+    else:
+        st.success("MODERATE OR LOW RISK")
+
+    # Chart
+    countries = ["Vanuatu", "Philippines", "Bangladesh", "Your Country"]
+    scores = [36.49, 25.88, 19.16, score]
+    fig, ax = plt.subplots()
+    ax.bar(countries, scores, color=['#ef4444', '#f97316', '#facc15', '#8b5cf6'])
+    ax.set_ylabel("WRI Score")
+    ax.set_title("Your Country vs Top-Risk Nations")
+    st.pyplot(fig)
+
+st.caption("Model trained on official WorldRiskReport 2023 • 100% offline • Made with love")
